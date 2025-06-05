@@ -1,0 +1,117 @@
+bl_info = {
+    "name": "NolzeyTapeMessure",
+    "author": "Mike Nolan",
+    "version": (1, 0, 0),
+    "blender": (4, 4, 3),
+    "location": "3D View > Pie Menu (default: Shift+F)",
+    "description": "Pie menu for snapping options and toggle for Shear tool",
+    "category": "3D View",
+}
+
+import bpy
+from bpy.types import Menu, Operator
+
+# Operator to toggle snap
+class NOLZEYTAPE_OT_toggle_snap(Operator):
+    bl_idname = "nolzeytape.toggle_snap"
+    bl_label = "Toggle Snapping"
+    bl_description = "Toggle Snap On/Off"
+
+    def execute(self, context):
+        tool_settings = context.tool_settings
+        tool_settings.use_snap = not tool_settings.use_snap
+        return {'FINISHED'}
+
+# Operator to set snap element
+class NOLZEYTAPE_OT_set_snap_element(Operator):
+    bl_idname = "nolzeytape.set_snap_element"
+    bl_label = "Set Snap Element"
+    bl_description = "Set Snap Element"
+
+    element: bpy.props.EnumProperty(
+        items=[
+            ('VERTEX', "Vertex", ""),
+            ('EDGE', "Edge", ""),
+            ('FACE', "Face", ""),
+            ('INCREMENT', "Increment", ""),
+            ('GRID', "Grid", ""),
+        ],
+        name="Snap Element"
+    )
+
+    def execute(self, context):
+        tool_settings = context.tool_settings
+        if self.element == 'GRID':
+            tool_settings.snap_elements = {'INCREMENT'}
+        else:
+            tool_settings.snap_elements = {self.element}
+        return {'FINISHED'}
+
+# Operator to toggle Shear tool
+class NOLZEYTAPE_OT_toggle_shear(Operator):
+    bl_idname = "nolzeytape.toggle_shear"
+    bl_label = "Toggle Shear Tool"
+    bl_description = "Enable/disable Shear tool (Toggles tool context to Shear or Select)"
+
+    def execute(self, context):
+        area = next((a for a in context.screen.areas if a.type == 'VIEW_3D'), None)
+        if not area:
+            self.report({'WARNING'}, "No 3D View found")
+            return {'CANCELLED'}
+        for space in area.spaces:
+            if space.type == 'VIEW_3D':
+                tool = space.active_tool
+                if tool and tool.idname == "builtin.shear":
+                    bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
+                else:
+                    bpy.ops.wm.tool_set_by_id(name="builtin.shear")
+                break
+        return {'FINISHED'}
+
+# Pie Menu
+class NOLZEYTAPE_MT_snap_pie(Menu):
+    bl_label = "Nolzeys Tape Messure"
+
+    def draw(self, context):
+        layout = self.layout
+        pie = layout.menu_pie()
+
+        # Pie button order: Vertex, Edge, Toggle Snap, Grid, Increment, Face, Toggle Shear
+        pie.operator("nolzeytape.set_snap_element", text="Vertex", icon="VERTEXSEL").element = 'VERTEX'
+        pie.operator("nolzeytape.set_snap_element", text="Edge", icon="EDGESEL").element = 'EDGE'
+        # Swapped: Toggle Snap comes here
+        pie.operator("nolzeytape.toggle_snap", text="Toggle Snap", icon="SNAP_ON")
+        pie.operator("nolzeytape.set_snap_element", text="Grid", icon="GRID").element = 'GRID'
+        pie.operator("nolzeytape.set_snap_element", text="Increment", icon="MOD_ARRAY").element = 'INCREMENT'
+        # Swapped: Face comes after Increment
+        pie.operator("nolzeytape.set_snap_element", text="Face", icon="FACESEL").element = 'FACE'
+        pie.operator("nolzeytape.toggle_shear", text="Toggle Shear", icon="MOD_SHEAR")
+
+addon_keymaps = []
+
+def register():
+    bpy.utils.register_class(NOLZEYTAPE_OT_toggle_snap)
+    bpy.utils.register_class(NOLZEYTAPE_OT_set_snap_element)
+    bpy.utils.register_class(NOLZEYTAPE_OT_toggle_shear)
+    bpy.utils.register_class(NOLZEYTAPE_MT_snap_pie)
+
+    # Add shortcut (Shift+F in 3D View)
+    wm = bpy.context.window_manager
+    kc = wm.keyconfigs.addon
+    if kc:
+        km = kc.keymaps.new(name='3D View', space_type='VIEW_3D')
+        kmi = km.keymap_items.new("wm.call_menu_pie", 'F', 'PRESS', shift=True)
+        kmi.properties.name = "NOLZEYTAPE_MT_snap_pie"
+        addon_keymaps.append((km, kmi))
+
+def unregister():
+    for km, kmi in addon_keymaps:
+        km.keymap_items.remove(kmi)
+    addon_keymaps.clear()
+    bpy.utils.unregister_class(NOLZEYTAPE_MT_snap_pie)
+    bpy.utils.unregister_class(NOLZEYTAPE_OT_toggle_shear)
+    bpy.utils.unregister_class(NOLZEYTAPE_OT_set_snap_element)
+    bpy.utils.unregister_class(NOLZEYTAPE_OT_toggle_snap)
+
+if __name__ == "__main__":
+    register()
